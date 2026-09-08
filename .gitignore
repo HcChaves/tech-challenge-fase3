@@ -1,0 +1,27 @@
+# Dado bruto grande demais para o GitHub (baixar manualmente - ver README)
+data/raw/alunos.csv
+
+# Dados gerados pelo pipeline (regeneraveis rodando os scripts em src/preprocessing)
+data/bronze/
+data/silver/
+
+# Ambiente Python
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VSCode
+.vscode/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Modelos e artefatos grandes (adicionar exceções pontuais se precisar versionar algum)
+*.pkl
+*.joblib
