@@ -1,9 +1,12 @@
 # Dado bruto grande demais para o GitHub (baixar manualmente - ver README)
 data/raw/alunos.csv
 
-# Dados gerados pelo pipeline (regeneraveis rodando os scripts em src/preprocessing)
+# Dados gerados pelo pipeline ( rodando os scripts em src/preprocessing)
+# Apenas a camada bronze n vai para o rep
+# a camada silver vai para o rep, permitindo rodar o projeto a partir 
+# da modelagem com os dados salvos
 data/bronze/
-data/silver/
+
 
 # Ambiente Python
 .venv/
