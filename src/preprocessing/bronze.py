@@ -1,6 +1,6 @@
 """
 Camada Bronze - Le as bases brutas (CSV) e converte para Parquet particionado por ano.
-Versao local (sem AWS/S3), adaptada do pipeline original da Fase 2.
+Versao local, adaptada do pipeline original da Fase 2.
 
 Como rodar (a partir da raiz do repositorio):
     python src/preprocessing/bronze.py

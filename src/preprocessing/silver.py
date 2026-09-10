@@ -1,6 +1,6 @@
 """
 Camada Silver - Limpeza e padronizacao das bases da camada Bronze.
-Versao local (sem AWS/S3), adaptada do pipeline original da Fase 2.
+Versao local, adaptada do pipeline original da Fase 2.
 
 Como rodar (a partir da raiz do repositorio, depois do bronze.py):
     python src/preprocessing/silver.py
