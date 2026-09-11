@@ -99,7 +99,27 @@ A ser preenchido...
 
 ## Insights encontrados
 
-A ser preenchido conforme a análise exploratória e os resultados do modelo.
+### Distribuição do target
+- O target `alfabetizado` está moderadamente desbalanceado: **59,1% alfabetizados** vs. **40,9% não alfabetizados** — desbalanceamento leve, não exige técnicas agressivas de balanceamento, mas justifica reportar métricas além de acurácia (precisão, recall, F1) na fase de avaliação.
+- O percentual de alfabetização é preocupantemente baixo (abaixo de 60% em ambos os anos) e cresceu apenas **1,37 ponto percentual** entre 2023 (58,38%) e 2024 (59,75%) — evolução lenta em relação às metas de 2030.
+- Rede **Estadual** tem taxa de alfabetização ligeiramente maior que a **Municipal** (62,09% vs. 58,77%).
+- Forte desigualdade regional: **Norte (50,93%)** e **Nordeste (55,72%)** ficam bem abaixo de Sul (64,45%), Centro-Oeste (61,91%) e Sudeste (61,25%). Ainda assim, alguns estados dessas regiões mais precárias (CE, RO, PE) aparecem entre os de maior taxa de alfabetização do país — mostrando que a variação **dentro** de uma região é grande, o que reforça o valor de usar indicadores a nível de município (mais granulares) em vez de só UF/região.
+
+### Casos de data leakage confirmados (não apenas suspeitados)
+
+**1. `proficiencia` — leakage direto e documentado.** A própria documentação oficial da base confirma que `alfabetizado` é definido por uma regra de corte determinística: aluno é considerado alfabetizado se `proficiencia >= 743` na escala SAEB. Isso foi confirmado nos dados: a maior proficiência entre os não-alfabetizados foi 742,9998, e a menor entre os alfabetizados foi exatamente 743,0 — separação perfeita. **`proficiencia` não pode ser usada como variável explicativa**, sob risco de o modelo apenas reaprender essa regra de corte em vez de generalizar um padrão preditivo real.
+
+**2. `mun_taxa_alfabetizacao` — leakage indireto, confirmado por reconstrução matemática.** Recalculamos a taxa de alfabetização de cada município a partir da própria base de alunos (média de `alfabetizado` ponderada por `peso_aluno`, agrupada por ano e município) e comparamos com o valor já presente na coluna `mun_taxa_alfabetizacao`. A diferença mediana entre os dois foi de apenas **0,0046 pontos percentuais** — ou seja, a coluna é, na prática, uma reconstrução quase exata do próprio target agregado, calculada incluindo o resultado do aluno que estamos tentando prever. Mesmo não sendo uma cópia linha a linha como `proficiencia`, o efeito é equivalente: usar essa variável entrega ao modelo uma versão agregada da resposta.
+
+Essa mesma lógica se propaga para as variáveis derivadas de `mun_taxa_alfabetizacao` e `proficiencia`: `gap_mun_meta_2030`, `mun_nivel_alfabetizacao` e `mun_prop_nivel_`.
+
+- `mun_nivel_alfabetizacao` é uma **categorização em faixas fixas de 10 pontos** de `mun_taxa_alfabetizacao` (nível 0: até ~40%, nível 1: 40–50%, ..., nível 5: 80–100%, sem sobreposição entre faixas). Não agrega nenhuma informação nova além da própria taxa (e ainda perde granularidade) — **candidata a descarte por multicolinearidade**, além de herdar o leakage do item acima.
+- As variáveis a nível de **UF** (`uf_taxa_alfabetizacao`, `uf_media_portugues`) mostram bem menos variabilidade que as equivalentes a nível de **município**, confirmando que agregar num nível territorial mais amplo "suaviza" as diferenças reais entre localidades — reforça a decisão de priorizar as features municipais na modelagem.
+
+### Variáveis sem sinal (ruído)
+- `id_municipio`, `id_escola`, `id_aluno` são identificadores, sem valor preditivo.
+- `serie` tem um único valor constante em toda a base (2º ano) e `presenca` também (sempre 1, já que a base foi filtrada só para presentes na silver) — variância zero, sem informação.
+- `caderno` e `preenchimento_caderno` mostraram correlação próxima de zero com o target (0,0005 e 0,023, respectivamente) — indícios de que são apenas ruído operacional da aplicação da prova, não sinal pedagógico.
 
 ## Limitações do projeto
 
