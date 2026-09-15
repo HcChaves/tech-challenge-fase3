@@ -51,8 +51,6 @@ As demais 5 bases já estão versionadas em `data/raw/`.
 
 As bases utilizadas para criar alunos_enriquecidos tambem deve ser baixada acessando o link nas fonte dos dados.
 
-No entanto versionamos a base final utilizada para modelagem em `data/df_final.parquet`
-
 ### Pipeline de dados
 
 data/raw/ - CSVs originais
