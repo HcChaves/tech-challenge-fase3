@@ -6,6 +6,7 @@ data/raw/alunos.csv
 # a camada silver vai para o rep, permitindo rodar o projeto a partir 
 # da modelagem com os dados salvos
 data/bronze/
+data/master_table.parquet
 
 
 # Ambiente Python
