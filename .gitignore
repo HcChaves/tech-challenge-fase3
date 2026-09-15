@@ -7,6 +7,8 @@ data/raw/alunos.csv
 # da modelagem com os dados salvos
 data/bronze/
 data/master_table.parquet
+data/alunos_enriquecido.parquet
+data/df_final.parquet
 
 
 # Ambiente Python

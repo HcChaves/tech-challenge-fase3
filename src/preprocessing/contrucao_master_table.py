@@ -10,7 +10,7 @@ from pathlib import Path
 # 1. Carregar base Silver de alunos (2023 e 2024 - Fase 02)
 # =============================================================================
 
-base_path = Path(r"C:\Users\mdjsa\OneDrive\Documentos\Marquinho\06_POS_GRADUACAO\03a_FASE\tech-challenge-fase3\data\silver\alunos")
+base_path = Path(r"C:\dev\tech-challenge-fase3\data\silver\alunos")
 
 dfs = []
 for year_dir in sorted(base_path.glob("year=*")):
@@ -202,7 +202,7 @@ print(f"Total de registros base Alunos enriquecida com match: {len(df_enriquecid
 # =============================================================================
 
 df_enriquecido_v2.to_parquet(
-    fr"{base_path_externo}\alunos_enriquecido_v2.parquet",
+    fr"{base_path_externo}\alunos_enriquecido.parquet",
     index=False
 )
 

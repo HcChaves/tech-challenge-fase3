@@ -34,8 +34,13 @@ arquivos CSV brutos:
 
 **Fonte dos dados:** [Base dos Dados – Alfabetização](https://basedosdados.org/dataset/073a39d4-89cf-4068-b1e8-34ed0d9c0b72?table=e1de7a6a-5038-4e81-89f0-a15f2cc12c9b)
 
+[Censo Escolar](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/censo-escolar)
+
+[Cadastro Único](https://dados.gov.br/dados/conjuntos-dados/pessoas-inscritas-no-cadastro-unico-por-faixa-de-renda-per-capita)
+
+
 **Sobre `alunos.csv`:** este arquivo tem mais de 200MB e não está incluído
-no repositório. Para reproduzir a pipeline de dados:
+no repositório na camada bronze. Para reproduzir a pipeline de dados:
 1. Baixe o arquivo na fonte indicada acima.
 2. Pode ser necessario realizar um consulta no BigQuery, devido ao tamanho da base
 3. Caso necessario, marque todas as colunas, clique em `gerar consulta`, clique em
@@ -44,22 +49,26 @@ no repositório. Para reproduzir a pipeline de dados:
 
 As demais 5 bases já estão versionadas em `data/raw/`.
 
+As bases utilizadas para criar alunos_enriquecidos tambem deve ser baixada acessando o link nas fonte dos dados.
+
+No entanto versionamos a base final utilizada para modelagem em `data/df_final.parquet`
+
 ### Pipeline de dados
 
 data/raw/ - CSVs originais
-data/bronze/ - Mesmos dados, convertidos para Parquet e particionados por ano
+data/bronze/ - Mesmos dados, convertidos para Parquet e particionados por ano, aqui incluido base `alunos`
 data/silver/- Dados limpos (tipos corrigidos, duplicatas removidas, categorias padronizadas)
-data/silver/integrado/ - Tabela final a nível aluno, com indicadores do município já unidos (esta é a base usada para treinar o modelo)
+data/silver/integrado/ - Tabela a nível aluno, com indicadores do município já unidos
+data/aluno_enriquecido - tabela final que vai para etapa de modelagem
 
 Para rodar o pipeline completo:
 
 ```bash
-python src/preprocessing/bronze.py
+python src/preprocessing/bronze.py - para começar aqui é necessário ter baixado o csv alunos da fonte citada em "descrição da base utilizada"
 python src/preprocessing/silver.py
 python src/preprocessing/integracao.py
+python src/construcao_master_table.py - Necessario baixar as tabelas utilizadas nas citadas "fontes de dados" 
 ```
-**Obs sobre versionamento dos dados:** Já `data/silver/`, incluindo a tabela
-`integrado/` usada para treinar o modelo, **é versionada**, permitindo ir direto para a etapa de modelagem.
 
 ## Estrutura do repositório
 
@@ -83,19 +92,51 @@ tech-challenge-fase3/
 ```
 ## Etapas de modelagem
 
-A ser preenchido...
+1. **Engenharia de features** (`src/preprocessing/engenharia_features.py`): consolidação de grupos de colunas correlacionadas em índices compostos (`indice_acessibilidade`, `indice_material_pedagogico`, `indice_infra_basica`), criação de proxy de superlotação (`alunos_por_sala`), log-transform em `n_escolas` e substituição das estatísticas socioeconômicas por coeficiente de variação (`_cv`), removendo as colunas originais redundantes.
+2. **Remoção de leakage**: exclusão de `proficiencia`, `mun_taxa_alfabetizacao` e das variáveis derivadas delas (`gap_mun_meta_2030`, `mun_nivel_alfabetizacao`, `mun_prop_nivel_*`), conforme detalhado na seção de insights abaixo.
+3. **Baseline** (`src/modeling/treinamento_modelo.py`): Pipeline scikit-learn (pré-processamento + `LGBMClassifier` com parâmetros default), treinado em `notebooks/02_modelagem.ipynb`.
+4. **Otimização de hiperparâmetros** (`src/modeling/otimizacao_hiperparametros.py`): busca com `HalvingRandomSearchCV`, escolhida no lugar do `RandomizedSearchCV` tradicional por permitir usar a base completa (~3,36M de registros) sem o custo de treinar todos os candidatos na base inteira — o método já aloca progressivamente mais dados às combinações mais promissoras. Rodada em duas etapas: uma busca ampla inicial e um refinamento posterior em torno dos hiperparâmetros vencedores.
 
 ## Escolha do algoritmo
 
-A ser preenchido...
+Optou-se pelo **LightGBM** (`LGBMClassifier`) pelos seguintes motivos:
+- Desempenho e velocidade de treino adequados ao volume da base (~3,36M de linhas, 20 features).
+- Robustez natural a diferenças de escala entre variáveis e a alguma colinearidade entre features (ao contrário de modelos lineares, árvores de decisão toleram melhor variáveis correlacionadas).
+- Boa relação entre poder preditivo e possibilidade de interpretação (via `feature_importances_`, `gain` e SHAP).
+
+O modelo foi encapsulado em uma `Pipeline` do scikit-learn (pré-processamento + modelo), garantindo que a mesma transformação de dados seja aplicada de forma consistente entre treino, validação e teste.
 
 ## Métricas de avaliação
 
-A ser preenchido...
+Métrica principal: **ROC-AUC**, escolhida por lidar melhor com o desbalanceamento leve do target (59,1% vs. 40,9%) do que a acurácia simples. Métricas complementares (precisão, recall, F1) também são reportadas por classe.
+
+| Etapa | ROC-AUC (CV) | ROC-AUC (teste) |
+|---|---|---|
+| Baseline (LightGBM default) | – | 0,6540 |
+| Busca de hiperparâmetros (grid amplo) | 0,6689 | – |
+| Refinamento do grid | 0,6702 | 0,6708 |
+
+O ROC-AUC no conjunto de teste ficou próximo do obtido na validação cruzada durante a busca (0,6702 → 0,6708), indicando que o modelo generaliza bem, sem overfitting relevante.
+
+Um trade-off relevante identificado: ativar `is_unbalance=True` durante a otimização elevou o recall da classe minoritária (`não alfabetizado`) de **0,32 para 0,62**, à custa de uma leve queda na acurácia geral (0,63 → 0,62) e no recall da classe majoritária (0,85 → 0,62). O F1 macro médio subiu de 0,57 para 0,62. Essa troca foi considerada favorável ao objetivo do projeto, já que identificar alunos não alfabetizados é mais relevante para direcionamento de recursos do que maximizar acerto geral.
 
 ## Interpretação dos resultados
 
-A ser preenchido...
+Análise de importância de features feita com `feature_importances_` do LightGBM, comparando os critérios `split` (nº de vezes que a feature foi usada em divisões) e `gain` (redução real de erro proporcionada pela feature). O critério `gain` mostrou uma distribuição de importância bem mais discriminativa entre as features do que o `split`, e alterou consideravelmente o ranking.
+
+Principais achados:
+- `qtd_pes_pob_media` (quantidade média de pessoas em situação de pobreza na região) foi a feature mais importante em ambos os critérios — resultado associa fortemente contexto socioeconômico a desempenho escolar.
+- Os índices compostos criados na engenharia de features (`indice_infra_basica`, `indice_material_pedagogico`) ficaram entre as features mais importantes, validando a decisão de consolidar variáveis correlacionadas em vez de descartá-las.
+- Identificada correlação moderada entre `qtd_pes_pob_cv` e `qtd_pes_acima_meio_sm_cv` (0,66) e entre `qtd_pes_baixa_renda_cv` e `qtd_pes_acima_meio_sm_cv` (0,44) .
+- O teto de ROC-AUC (~0,67) é consistente com a natureza das features disponíveis: a maioria são agregados de escola/município, funcionando como proxies do contexto do aluno, e não características individuais diretas — uma limitação inerente à granularidade dos dados públicos utilizados (ver seção de limitações).
+
+O SHAP foi calculado com `shap.TreeExplainer` sobre uma amostra de 50 mil linhas do conjunto de teste, confirmando o padrão que nenhuma feat isolada domina o impacto na predição do modelo.
+
+- **O ranking mudou de novo.** `qtd_pes_pob_media`, que era a feature #1 tanto no `split` quanto no `gain`, cai para a 3ª posição no SHAP — ainda relevante, mas não mais isolada no topo. `pct_in_alimentacao` e `indice_infra_basica` assumem as duas primeiras posições, indicando que, embora `qtd_pes_pob_media` seja usada com frequência e gere bastante ganho estrutural nas árvores, seu impacto médio nas predições individuais é comparável ao de outras features de infraestrutura escolar.
+
+- **Features de infraestrutura têm direção intuitiva:** `alunos_por_sala` (superlotação), `pct_in_internet`, `pct_in_sala_leitura` e `pct_in_biblioteca` mostram o padrão esperado — valores mais altos de acesso a recursos (rosa) tendem a empurrar a predição para "alfabetizado", e valores baixos (azul) para o lado oposto — reforçando que essas variáveis carregam sinal pedagogicamente coerente, e não apenas ruído.
+
+A curva ROC do modelo otimizado no conjunto de teste confirma o AUC de 0,6708 já reportado na tabela de métricas. O traçado é suave e consistentemente acima da diagonal de referência, sem quedas ou degraus abruptos em nenhuma faixa de limiar — indicando que o modelo discrimina as classes de forma razoavelmente estável ao longo de todo o espectro de decisão, e que o teto de performance observado decorre da natureza difusa do sinal preditivo nas features
 
 ## Insights encontrados
 
@@ -116,7 +157,7 @@ Essa mesma lógica se propaga para as variáveis derivadas de `mun_taxa_alfabeti
 - `mun_nivel_alfabetizacao` é uma **categorização em faixas fixas de 10 pontos** de `mun_taxa_alfabetizacao` (nível 0: até ~40%, nível 1: 40–50%, ..., nível 5: 80–100%, sem sobreposição entre faixas). Não agrega nenhuma informação nova além da própria taxa (e ainda perde granularidade) — **candidata a descarte por multicolinearidade**, além de herdar o leakage do item acima.
 - As variáveis a nível de **UF** (`uf_taxa_alfabetizacao`, `uf_media_portugues`) mostram bem menos variabilidade que as equivalentes a nível de **município**, confirmando que agregar num nível territorial mais amplo "suaviza" as diferenças reais entre localidades — reforça a decisão de priorizar as features municipais na modelagem.
 
-### Variáveis sem sinal (ruído)
+### Variáveis sem sinal
 - `id_municipio`, `id_escola`, `id_aluno` são identificadores, sem valor preditivo.
 - `serie` tem um único valor constante em toda a base (2º ano) e `presenca` também (sempre 1, já que a base foi filtrada só para presentes na silver) — variância zero, sem informação.
 - `caderno` e `preenchimento_caderno` mostraram correlação próxima de zero com o target (0,0005 e 0,023, respectivamente) — indícios de que são apenas ruído operacional da aplicação da prova, não sinal pedagógico.
@@ -126,18 +167,24 @@ Essa mesma lógica se propaga para as variáveis derivadas de `mun_taxa_alfabeti
 - A base `alunos.csv` bruta não está versionada no repositório devido ao
   tamanho (>200MB), exigindo download manual para reprodução completa do
   pipeline desde o início (bronze). A camada `data/silver/` já processada,
-  no entanto, está versionada, permitindo rodar a modelagem sem esse download.
+  no entanto, está versionada, permitindo rodar a modelagem a partir de `src/integracao.py` e `src/contrucao_master_tabl.py`
 - Dados restritos aos anos de 2023 e 2024, o que limita a capacidade do
   modelo de capturar tendências de longo prazo.
+- Natureza das features das fontes sugeridas para enriqueciment contribuem de forma indireta, já que são oriundas de indicadores de munícipio. Os ids de aluno e escola foram mascarados, portanto não seria possível obter caracteristicas que possivelmente contribuissem para melhorar a previsão do modelo.
 
 
 ## Aplicação prática para políticas públicas
 
-_A ser preenchido: como o modelo pode apoiar decisões de gestores_
-_educacionais (ex: priorização de recursos, alunos em risco, municípios_
-_com maior necessidade de apoio pedagógico)._
+- Priorizar os recursos estimando por escola ou aluno a proporção antes da avaliação final, permitindo envio de reforços para que as metas sejam atendidas.
+
+- Alerta de risco individual para o aluno com a maior probabilidade de não atingir o nível esperado.
+
+- Direcionamento de amplio de infraestrutura municipal, dado que alimentação, biblioteca e laboratório de informática aparecem como fatores influentes para a alfabetizaçao.
+
+- Investigar o que da certo na rede Estadual que apresentou taxas mais altas de alfabetização tanto na análise exploratória quanto no gráfico SHAP. 
 
 ## Possíveis evoluções futuras
 
-_A ser preenchido: extensões possíveis do projeto (novas bases, novos_
-_anos, granularidade diferente, etc.)._
+- Substituir variaveis com contagens absolutas por versões normalizadas.
+- Incorporar dados de anos adicionais para captar tendências temporais.
+- A possibilidade de feats individuais para reduzir a necessidade de feats agrupadas indiretas provenientes de censos, municipios, UFs etc.
