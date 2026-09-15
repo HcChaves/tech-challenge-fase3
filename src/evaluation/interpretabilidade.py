@@ -55,8 +55,6 @@ def preparar_dados_shap(pipeline, X, sample_size=50_000, random_state=42):
     X_transformado = preprocessador.transform(X_amostra)
     nomes_features = preprocessador.get_feature_names_out()
 
-    # alguns preprocessadores (ex.: OneHotEncoder esparso) retornam matriz
-    # esparsa -- o shap.TreeExplainer trabalha melhor com array denso
     if hasattr(X_transformado, "toarray"):
         X_transformado = X_transformado.toarray()
 
@@ -67,9 +65,6 @@ def calcular_shap_values(pipeline, X, sample_size=50_000, random_state=42):
     """
     Calcula os SHAP values do modelo LightGBM dentro do pipeline, sobre uma
     amostra de X. Retorna o objeto de explicação do shap (`shap.Explanation`),
-    já pronto para os gráficos de `plotar_shap_summary` e `plotar_shap_bar`.
-
-    Requer a biblioteca `shap` (`pip install shap`).
     """
     import shap
 
@@ -88,8 +83,7 @@ def plotar_shap_summary(explicacao, max_features=15):
     Gráfico "beeswarm" do SHAP: mostra, para cada feature, como os valores
     (cores) se relacionam com o impacto na predição (posição no eixo X) --
     além de quais features mais influenciam o modelo, revela a *direção*
-    do efeito (ex.: valores altos de determinada feature empurram a
-    predição para "alfabetizado" ou para "não alfabetizado").
+    do efeito
     """
     import shap
 
@@ -101,9 +95,6 @@ def plotar_shap_summary(explicacao, max_features=15):
 def plotar_shap_bar(explicacao, max_features=15):
     """
     Gráfico de barras do SHAP: importância média absoluta de cada feature.
-    Mais fácil de comparar diretamente com o `feature_importances_` (gain)
-    já calculado, mas com a vantagem de refletir o impacto médio real nas
-    predições, e não apenas a estrutura interna das árvores.
     """
     import shap
 
@@ -114,10 +105,7 @@ def plotar_shap_bar(explicacao, max_features=15):
 
 def plotar_shap_dependencia(explicacao, feature, feature_interacao=None):
     """
-    Gráfico de dependência do SHAP para uma única feature: mostra como o
-    valor da feature se relaciona com seu impacto na predição -- útil para
-    checar se a relação é linear, tem patamares, ou se depende do valor de
-    outra feature (`feature_interacao`).
+    Gráfico de dependência do SHAP para uma única feature
     """
     import shap
 
